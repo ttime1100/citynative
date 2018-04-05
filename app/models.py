@@ -5,17 +5,14 @@ from flask_login import UserMixin
 from app import login
 from hashlib import md5
 
+followers = db.Table('followers',
+    db.Column('follower_id', db.Integer, db.ForeignKey('user.id')),
+    db.Column('followed_id', db.Integer, db.ForeignKey('user.id'))
+ )
 
 @login.user_loader
 def load_user(id):
     return User.query.get(int(id))
-# Association Table -- Many to Many
-
-followers = db.Table('followers',
-    db.Column('follower_id', db.Integer, db.ForeignKey('user.id')),
-    db.Column('followed_id', db.Integer, db.ForeignKey('user.id'))
-)
-
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -46,7 +43,7 @@ class User(UserMixin, db.Model):
 
     def follow(self, user):
         if not self.is_following(user):
-            self.followed.remove(user)
+            self.followed.append(user)
 
     def unfollow(self, user):
         if self.is_following(user):
@@ -62,6 +59,17 @@ class User(UserMixin, db.Model):
         own = Post.query.filter_by(user_id=self.id)
         return followed.union(own).order_by(Post.timestamp.desc())
 
+    def get_reset_password_token(self, expires_in=600):
+        return jwt.encode({'reset_password': self.id, 'exp': time() + expires_in},
+            app.config['SCRET_KEY'], algorithm='HS256').decode('utf-8')
+
+    @staticmethod
+    def verify_reset_password_token(token):
+        try:
+            id = jwt.decode(token, app.config['SCRET_KEY'], algorithms=['HS256'])['reset_password']
+        except:
+            return
+        return User.query.get(id)
 
 
 # Post Model
@@ -73,5 +81,3 @@ class Post(db.Model):
 
     def __repr__(self):
         return '<POst {}>'.format(self.body)
-
-# Association Table -- Many to Many
